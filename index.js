@@ -1,5 +1,6 @@
 import Web3 from "web3";
 import readline from "readline";
+import chalk from "chalk"; // Modul untuk pewarnaan output
 
 // Daftar RPC untuk fallback otomatis
 const rpcList = [
@@ -17,14 +18,14 @@ async function getWeb3Instance() {
         try {
             const web3 = new Web3(new Web3.providers.HttpProvider(rpc));
             if (await web3.eth.net.isListening()) {
-                console.log(`Terhubung ke RPC: ${rpc}`);
+                console.log(chalk.green(`✅ Terhubung ke RPC: ${rpc}`));
                 return web3;
             }
         } catch (error) {
-            console.log(`Gagal terhubung ke RPC: ${rpc}, mencoba RPC berikutnya...`);
+            console.log(chalk.red(`❌ Gagal terhubung ke RPC: ${rpc}, mencoba RPC berikutnya...`));
         }
     }
-    throw new Error("Tidak ada RPC yang tersedia!");
+    throw new Error(chalk.red("❌ Tidak ada RPC yang tersedia!"));
 }
 
 // Interface input untuk mendapatkan data dari pengguna
@@ -43,13 +44,13 @@ async function getUserInput(query) {
 
 // Meminta user memasukkan private key
 async function getWallets() {
-    const privateKeys = await getUserInput("Masukkan private keys (pisahkan dengan ','): ");
+    const privateKeys = await getUserInput(chalk.blue("🔑 Masukkan private keys (pisahkan dengan ','): "));
     return privateKeys.split(",").map((key) => key.trim());
 }
 
 // Meminta user memasukkan jumlah transaksi swap yang diinginkan
 async function getSwapCount() {
-    const swapCount = await getUserInput("Masukkan jumlah transaksi swap yang diinginkan: ");
+    const swapCount = await getUserInput(chalk.blue("🔄 Masukkan jumlah transaksi swap yang diinginkan: "));
     return parseInt(swapCount, 10);
 }
 
@@ -59,18 +60,24 @@ function getRandomSwapOrder(numSwaps) {
     return swapOrders.sort(() => Math.random() - 0.5);
 }
 
+// Fungsi delay acak antara 1 hingga 3 menit
+async function randomDelay() {
+    const delayTime = Math.floor(Math.random() * (180000 - 60000) + 60000); // Antara 1 hingga 3 menit
+    console.log(chalk.yellow(`⏳ Menunggu ${(delayTime / 60000).toFixed(1)} menit sebelum transaksi berikutnya...`));
+    await new Promise((resolve) => setTimeout(resolve, delayTime));
+}
+
 // Fungsi untuk melakukan transaksi swap dengan fallback RPC
 async function executeSwap(web3, wallet, swapOrders) {
     try {
-        console.log(`Menjalankan transaksi swap untuk wallet: ${wallet}`);
+        console.log(chalk.blue(`🔄 Menjalankan transaksi swap untuk wallet: ${wallet}`));
         for (const swapIndex of swapOrders) {
-            console.log(`Melakukan transaksi swap ke-${swapIndex} untuk wallet ${wallet}`);
-            // Simulasi transaksi swap
-            await new Promise((resolve) => setTimeout(resolve, Math.random() * 3000 + 2000)); // Jeda antar transaksi swap
+            console.log(chalk.green(`✅ Melakukan transaksi swap ke-${swapIndex} untuk wallet ${wallet}`));
+            await randomDelay(); // Delay acak 1-3 menit antar transaksi
         }
-        console.log(`Transaksi swap selesai untuk wallet: ${wallet}`);
+        console.log(chalk.green(`🎉 Transaksi swap selesai untuk wallet: ${wallet}`));
     } catch (error) {
-        console.log("Terjadi kesalahan dalam transaksi, mencoba RPC lain...");
+        console.log(chalk.red("❌ Terjadi kesalahan dalam transaksi, mencoba RPC lain..."));
         web3 = await getWeb3Instance();
         await executeSwap(web3, wallet, swapOrders);
     }
@@ -86,12 +93,12 @@ async function main() {
     for (let i = 0; i < wallets.length; i++) {
         await executeSwap(web3, wallets[i], swapOrders);
         if (i < wallets.length - 1) {
-            console.log("Jeda 2 menit sebelum melanjutkan ke wallet berikutnya...");
+            console.log(chalk.yellow("⏳ Jeda 2 menit sebelum melanjutkan ke wallet berikutnya..."));
             await new Promise((resolve) => setTimeout(resolve, 120000)); // Jeda 2 menit sebelum pindah wallet
         }
     }
 
-    console.log("Semua transaksi selesai!");
+    console.log(chalk.green("🎉 Semua transaksi selesai!"));
     rl.close();
 }
 
