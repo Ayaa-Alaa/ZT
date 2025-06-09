@@ -1,5 +1,10 @@
 import readline from "readline";
 import { ethers } from "ethers";
+import fs from "fs";
+
+// Baca ABI dari file "datanya.json"
+const abiData = JSON.parse(fs.readFileSync("datanya.json", "utf8"));
+const CONTRACT_ABI = abiData.ABI;
 
 const RPC_LIST = [
   "https://evmrpc-testnet.0g.ai",
@@ -78,6 +83,24 @@ rl.question("Masukkan PRIVATE_KEY Anda (pisahkan dengan koma jika lebih dari sat
   setProvider();
   rl.close();
 
+  async function executeSwap(wallet, tokenIn, tokenOut, amount) {
+    const swapContract = new ethers.Contract("0xb95B5953FF8ee5D5d9818CdbEfE363ff2191318c", CONTRACT_ABI, wallet);
+
+    try {
+      const tx = await swapContract.exactInputSingle({
+        tokenIn, tokenOut, fee: 3000, recipient: wallet.address,
+        deadline: Math.floor(Date.now() / 1000) + 120,
+        amountIn: amount, amountOutMinimum: 0, sqrtPriceLimitX96: 0
+      }, { gasLimit: 150000, gasPrice: (await provider.getFeeData()).gasPrice });
+
+      console.log(`Swap Tx dari ${wallet.address}: ${tokenIn} ➯ ${tokenOut}, Nominal: ${ethers.formatUnits(amount, 18)}, Tx: ${tx.hash}`);
+      await tx.wait();
+    } catch (error) {
+      console.error(`Swap gagal dari wallet ${wallet.address}: ${error.message}`);
+      await tryNextRpc();
+    }
+  }
+
   async function executeSwapForWallet(wallet) {
     const totalSwaps = getRandomTransactionCount(); // Set jumlah transaksi acak
     console.log(`Mulai swap dengan wallet: ${wallet.address} (${totalSwaps} kali transaksi)`);
@@ -90,27 +113,8 @@ rl.question("Masukkan PRIVATE_KEY Anda (pisahkan dengan koma jika lebih dari sat
       const amount = getRandomAmount(tokenIn);
 
       await waitRandomDelay(); // Jeda sebelum swap
-
-      const swapContract = new ethers.Contract(
-        "0xb95B5953FF8ee5D5d9818CdbEfE363ff2191318c",
-        [...], // Isi dengan ABI router swap
-        wallet
-      );
-
-      try {
-        const tx = await swapContract.exactInputSingle({
-          tokenIn, tokenOut, fee: 3000, recipient: wallet.address,
-          deadline: Math.floor(Date.now() / 1000) + 120,
-          amountIn: amount, amountOutMinimum: 0, sqrtPriceLimitX96: 0
-        }, { gasLimit: 150000, gasPrice: (await provider.getFeeData()).gasPrice });
-
-        console.log(`Swap Tx (${successfulSwaps + 1}/${totalSwaps}) dari wallet ${wallet.address}: ${tokenIn} ➯ ${tokenOut}, Nominal: ${ethers.formatUnits(amount, 18)}, Tx: ${tx.hash}`);
-        await tx.wait();
-        successfulSwaps++; // Hanya menghitung transaksi sukses
-      } catch (error) {
-        console.error(`Swap gagal dari wallet ${wallet.address}: ${error.message}`);
-        await tryNextRpc();
-      }
+      await executeSwap(wallet, TOKEN_ADDRESSES[tokenIn], TOKEN_ADDRESSES[tokenOut], amount);
+      successfulSwaps++; // Hanya menghitung transaksi sukses
     }
   }
 
