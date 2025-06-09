@@ -1,6 +1,6 @@
-import Web3 from "web3";
-import readline from "readline";
-import chalk from "chalk"; // Modul untuk pewarnaan output
+const Web3 = require("web3");
+const readline = require("readline");
+const chalk = require("chalk"); // Menggunakan CommonJS untuk kompatibilitas
 
 // Daftar RPC untuk fallback otomatis
 const rpcList = [
