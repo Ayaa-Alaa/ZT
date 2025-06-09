@@ -1,64 +1,98 @@
-from web3 import Web3
-import time
-import random
+import Web3 from "web3";
+import readline from "readline";
 
-# Daftar RPC yang akan digunakan untuk fallback
-rpc_list = [
+// Daftar RPC untuk fallback otomatis
+const rpcList = [
     "https://evmrpc-testnet.0g.ai",
     "https://0g-testnet-rpc.astrostake.xyz",
     "https://lightnode-json-rpc-0g.grandvalleys.com",
     "https://0g-galileo-evmrpc.corenodehq.xyz/",
     "https://0g.json-rpc.cryptomolot.com/",
     "https://0g-evm.maouam.nodelab.my.id/",
-]
+];
 
-# Fungsi untuk mencoba koneksi dengan fallback RPC jika terjadi error
-def get_web3_instance():
-    for rpc in rpc_list:
-        try:
-            web3 = Web3(Web3.HTTPProvider(rpc))
-            if web3.is_connected():
-                print(f"Terhubung ke RPC: {rpc}")
-                return web3
-        except:
-            print(f"Gagal terhubung ke RPC: {rpc}, mencoba RPC berikutnya...")
-    raise Exception("Tidak ada RPC yang tersedia!")
+// Fungsi untuk mendapatkan koneksi Web3 dengan fallback RPC
+async function getWeb3Instance() {
+    for (const rpc of rpcList) {
+        try {
+            const web3 = new Web3(new Web3.providers.HttpProvider(rpc));
+            if (await web3.eth.net.isListening()) {
+                console.log(`Terhubung ke RPC: ${rpc}`);
+                return web3;
+            }
+        } catch (error) {
+            console.log(`Gagal terhubung ke RPC: ${rpc}, mencoba RPC berikutnya...`);
+        }
+    }
+    throw new Error("Tidak ada RPC yang tersedia!");
+}
 
-# Inisialisasi koneksi ke blockchain
-web3 = get_web3_instance()
+// Interface input untuk mendapatkan data dari pengguna
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+});
 
-# Meminta user memasukkan private key
-private_keys = input("Masukkan private keys (pisahkan dengan ','): ").split(",")
+async function getUserInput(query) {
+    return new Promise((resolve) => {
+        rl.question(query, (answer) => {
+            resolve(answer);
+        });
+    });
+}
 
-# Meminta user memasukkan jumlah transaksi swap yang diinginkan
-num_swaps = int(input("Masukkan jumlah transaksi swap yang diinginkan: "))
+// Meminta user memasukkan private key
+async function getWallets() {
+    const privateKeys = await getUserInput("Masukkan private keys (pisahkan dengan ','): ");
+    return privateKeys.split(",").map((key) => key.trim());
+}
 
-# Simpan urutan transaksi acak
-swap_orders = list(range(num_swaps))
-random.shuffle(swap_orders)
+// Meminta user memasukkan jumlah transaksi swap yang diinginkan
+async function getSwapCount() {
+    const swapCount = await getUserInput("Masukkan jumlah transaksi swap yang diinginkan: ");
+    return parseInt(swapCount, 10);
+}
 
-# Struktur transaksi swap dengan fallback RPC
-def execute_swap(wallet_address):
-    try:
-        print(f"Menjalankan transaksi swap untuk wallet: {wallet_address}")
-        for swap_index in swap_orders:
-            print(f"Melakukan transaksi swap ke-{swap_index+1} untuk wallet {wallet_address}")
-            # Simulasi transaksi swap
-            time.sleep(random.randint(1, 5))  # Jeda antar transaksi swap
-        print("Transaksi swap berhasil!")
-    except:
-        print("Error dalam transaksi, mencoba RPC lain...")
-        global web3
-        web3 = get_web3_instance()
-        execute_swap(wallet_address)
+// Mengacak urutan transaksi swap
+function getRandomSwapOrder(numSwaps) {
+    const swapOrders = Array.from({ length: numSwaps }, (_, i) => i + 1);
+    return swapOrders.sort(() => Math.random() - 0.5);
+}
 
-# Eksekusi transaksi swap untuk setiap wallet
-for i, key in enumerate(private_keys):
-    print(f"Menjalankan transaksi untuk wallet {i+1}...")
-    execute_swap(key)
-    
-    if i < len(private_keys) - 1:
-        print("Jeda 2 menit sebelum lanjut ke wallet berikutnya...")
-        time.sleep(120)  # Jeda 2 menit sebelum pindah wallet
+// Fungsi untuk melakukan transaksi swap dengan fallback RPC
+async function executeSwap(web3, wallet, swapOrders) {
+    try {
+        console.log(`Menjalankan transaksi swap untuk wallet: ${wallet}`);
+        for (const swapIndex of swapOrders) {
+            console.log(`Melakukan transaksi swap ke-${swapIndex} untuk wallet ${wallet}`);
+            // Simulasi transaksi swap
+            await new Promise((resolve) => setTimeout(resolve, Math.random() * 3000 + 2000)); // Jeda antar transaksi swap
+        }
+        console.log(`Transaksi swap selesai untuk wallet: ${wallet}`);
+    } catch (error) {
+        console.log("Terjadi kesalahan dalam transaksi, mencoba RPC lain...");
+        web3 = await getWeb3Instance();
+        await executeSwap(web3, wallet, swapOrders);
+    }
+}
 
-print("Semua transaksi selesai!")
+// Main function
+async function main() {
+    const web3 = await getWeb3Instance();
+    const wallets = await getWallets();
+    const swapCount = await getSwapCount();
+    const swapOrders = getRandomSwapOrder(swapCount);
+
+    for (let i = 0; i < wallets.length; i++) {
+        await executeSwap(web3, wallets[i], swapOrders);
+        if (i < wallets.length - 1) {
+            console.log("Jeda 2 menit sebelum melanjutkan ke wallet berikutnya...");
+            await new Promise((resolve) => setTimeout(resolve, 120000)); // Jeda 2 menit sebelum pindah wallet
+        }
+    }
+
+    console.log("Semua transaksi selesai!");
+    rl.close();
+}
+
+main();
