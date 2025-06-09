@@ -1,6 +1,6 @@
-const Web3 = require("web3");
-const readline = require("readline");
-const chalk = require("chalk"); // Menggunakan CommonJS untuk kompatibilitas
+import Web3 from "web3";
+import readline from "readline";
+import chalk from "chalk"; // Menggunakan ES Module
 
 // Daftar RPC untuk fallback otomatis
 const rpcList = [
