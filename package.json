@@ -1,17 +1,15 @@
 {
-  "name": "swap-transactions",
-  "version": "1.0.1",
-  "description": "Program otomatis untuk transaksi swap dengan fallback RPC",
+  "name": "nt-exhaust",
+  "version": "1.0.0",
+  "description": "Automated swap system with multiple RPC fallbacks",
   "main": "index.js",
-  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "web3": "^1.10.0",
-    "chalk": "^5.0.1"
-  },
-  "engines": {
-    "node": ">=16.0.0"
+    "dotenv": "^16.0.3",
+    "blessed": "^0.1.81",
+    "figlet": "^1.5.2",
+    "ethers": "^6.4.0"
   }
 }
