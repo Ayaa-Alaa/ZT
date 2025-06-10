@@ -9,7 +9,7 @@ const ETH_ADDRESS = process.env.ETH_ADDRESS;
 const BTC_ADDRESS = process.env.BTC_ADDRESS;
 const ROUTER_ADDRESS = process.env.ROUTER_ADDRESS;
 const NETWORK_NAME = process.env.NETWORK_NAME;
-const CONTRACT_ABI = JSON.parse(process.env.CONTRACT_ABI); // Mengubah string JSON menjadi array ABI
+const CONTRACT_ABI = JSON.parse(process.env.CONTRACT_ABI);
 
 // Pilih RPC
 console.log("Pilih RPC yang ingin digunakan:");
@@ -52,48 +52,72 @@ if (totalSwaps <= 0) {
   process.exit(1);
 }
 
-// Swap otomatis
-async function autoSwapAllPairs(wallets, totalSwaps, provider) {
-  for (let i = 0; i < totalSwaps; i++) {
-    const wallet = wallets[i % wallets.length];
-
-    await swapAuto(wallet, provider, "usdtToEth", getRandomSwapAmount());
-    await updateWalletData();
-    await delay(getRandomDelay());
-
-    await swapAuto(wallet, provider, "usdtToBtc", getRandomSwapAmount());
-    await updateWalletData();
-    await delay(getRandomDelay());
-
-    await swapAuto(wallet, provider, "btcToEth", getRandomSwapAmount());
-    await updateWalletData();
+// Fungsi untuk mendapatkan nominal swap dalam rentang yang diinginkan
+function getSwapAmount(direction) {
+  if (direction === "usdtToEth" || direction === "usdtToBtc") {
+    return ethers.parseUnits((30 + Math.random() * 10).toFixed(6), 6); // USDT: 30 - 40 USDT
+  } else if (direction === "btcToEth") {
+    return ethers.parseUnits((0.0004 + Math.random() * 0.0004).toFixed(8), 8); // BTC: 0.0004 - 0.0008 BTC
+  } else {
+    return ethers.parseUnits((0.004 + Math.random() * 0.004).toFixed(18), 18); // ETH: 0.004 - 0.008 ETH
   }
-
-  console.log("Semua swap selesai!");
 }
 
-// Fungsi Swap
+// Swap otomatis sesuai urutan wallet 1 → wallet 2 → wallet n
+async function autoSwapAllPairs(wallets, totalSwaps, provider) {
+  for (let j = 0; j < wallets.length; j++) {
+    const wallet = wallets[j];
+    console.log(`🔄 Swap dimulai untuk Wallet ${j + 1}: ${wallet.address}`);
+
+    for (let i = 0; i < totalSwaps; i++) {
+      await swapAuto(wallet, provider, "usdtToEth", getSwapAmount("usdtToEth"));
+      await updateWalletData();
+      await delay(getRandomDelay());
+
+      await swapAuto(wallet, provider, "usdtToBtc", getSwapAmount("usdtToBtc"));
+      await updateWalletData();
+      await delay(getRandomDelay());
+
+      await swapAuto(wallet, provider, "btcToEth", getSwapAmount("btcToEth"));
+      await updateWalletData();
+    }
+
+    console.log(`✅ Wallet ${j + 1} telah menyelesaikan ${totalSwaps} swap.`);
+  }
+
+  console.log("🏁 Semua wallet telah selesai melakukan swap!");
+}
+
+// Fungsi Swap dengan Gas Limit Standar & Slippage 0.5%
 async function swapAuto(wallet, provider, direction, amountIn) {
   try {
     const swapContract = new ethers.Contract(ROUTER_ADDRESS, CONTRACT_ABI, wallet);
     let params;
     const deadline = Math.floor(Date.now() / 1000) + 120;
 
-    if (direction === "usdtToEth") {
-      params = { tokenIn: USDT_ADDRESS, tokenOut: ETH_ADDRESS, fee: 3000, recipient: wallet.address, deadline, amountIn, amountOutMinimum: 0, sqrtPriceLimitX96: 0n };
-    } else if (direction === "usdtToBtc") {
-      params = { tokenIn: USDT_ADDRESS, tokenOut: BTC_ADDRESS, fee: 3000, recipient: wallet.address, deadline, amountIn, amountOutMinimum: 0, sqrtPriceLimitX96: 0n };
-    } else if (direction === "btcToEth") {
-      params = { tokenIn: BTC_ADDRESS, tokenOut: ETH_ADDRESS, fee: 3000, recipient: wallet.address, deadline, amountIn, amountOutMinimum: 0, sqrtPriceLimitX96: 0n };
-    } else {
-      throw new Error("Swap direction tidak valid.");
-    }
+    const expectedAmount = Number(amountIn) * 1.005; // Prediksi hasil swap
+    const slippagePercentage = 0.995; // Izinkan slippage 0.5%
+    
+    params = {
+      tokenIn: direction.includes("usdt") ? USDT_ADDRESS : BTC_ADDRESS,
+      tokenOut: direction.includes("eth") ? ETH_ADDRESS : BTC_ADDRESS,
+      fee: 3000,
+      recipient: wallet.address,
+      deadline,
+      amountIn,
+      amountOutMinimum: ethers.parseUnits((expectedAmount * slippagePercentage).toFixed(18), 18),
+      sqrtPriceLimitX96: 0n
+    };
 
-    const tx = await swapContract.exactInputSingle(params, { gasLimit: 150000, gasPrice: await provider.getFeeData().gasPrice });
+    const tx = await swapContract.exactInputSingle(params, {
+      gasLimit: 300000, // Gunakan gas limit standar
+      gasPrice: await provider.getFeeData().gasPrice
+    });
+
     console.log(`Swap berhasil: ${tx.hash}`);
     await tx.wait();
   } catch (error) {
-    console.error(`Swap gagal: ${error.message}`);
+    console.error(`Swap gagal: ${error.reason || error.message}`);
   }
 }
 
@@ -107,15 +131,9 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Fungsi untuk mendapatkan jumlah swap acak
-function getRandomSwapAmount() {
-  return Math.floor(Math.random() * (300 - 100 + 1) + 100);
-}
-
 // Fungsi untuk jeda acak antar swap
 function getRandomDelay() {
   return Math.floor(Math.random() * (120 - 60 + 1) + 60) * 1000;
-}
 
-// Menjalankan swap otomatis
+// Menjalankan swap otomatis sesuai urutan wallet
 autoSwapAllPairs(wallets, totalSwaps, provider);
