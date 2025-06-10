@@ -1,105 +1,99 @@
-import Web3 from "web3";
+import "dotenv/config";
+import blessed from "blessed";
+import figlet from "figlet";
+import { ethers } from "ethers";
 import readline from "readline";
-import chalk from "chalk"; // Menggunakan ES Module
 
-// Daftar RPC untuk fallback otomatis
-const rpcList = [
-    "https://evmrpc-testnet.0g.ai",
-    "https://0g-testnet-rpc.astrostake.xyz",
-    "https://lightnode-json-rpc-0g.grandvalleys.com",
-    "https://0g-galileo-evmrpc.corenodehq.xyz/",
-    "https://0g.json-rpc.cryptomolot.com/",
-    "https://0g-evm.maouam.nodelab.my.id/",
-];
+const RPC_LIST = process.env.RPC_URL.split(",").map(url => url.trim());
+let currentRpcIndex = 0;
+let provider = new ethers.JsonRpcProvider(RPC_LIST[currentRpcIndex]);
 
-// Fungsi untuk mendapatkan koneksi Web3 dengan fallback RPC
-async function getWeb3Instance() {
-    for (const rpc of rpcList) {
-        try {
-            const web3 = new Web3(new Web3.providers.HttpProvider(rpc));
-            if (await web3.eth.net.isListening()) {
-                console.log(chalk.green(`✅ Terhubung ke RPC: ${rpc}`));
-                return web3;
-            }
-        } catch (error) {
-            console.log(chalk.red(`❌ Gagal terhubung ke RPC: ${rpc}, mencoba RPC berikutnya...`));
-        }
-    }
-    throw new Error(chalk.red("❌ Tidak ada RPC yang tersedia!"));
+// Switch RPC when an error occurs
+function switchToNextRpc() {
+  currentRpcIndex = (currentRpcIndex + 1) % RPC_LIST.length;
+  provider = new ethers.JsonRpcProvider(RPC_LIST[currentRpcIndex]);
+  console.log(`Beralih ke RPC ${currentRpcIndex + 1}: ${RPC_LIST[currentRpcIndex]}`);
 }
 
-// Interface input untuk mendapatkan data dari pengguna
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+// Wallet input
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+rl.question("Masukkan PRIVATE_KEY (pisahkan dengan koma jika lebih dari satu): ", (input) => {
+  const privateKeys = input.split(",").map(pk => pk.trim());
+  rl.close();
+  startApplication(privateKeys);
 });
 
-async function getUserInput(query) {
-    return new Promise((resolve) => {
-        rl.question(query, (answer) => {
-            resolve(answer);
-        });
-    });
+function startApplication(privateKeys) {
+  if (privateKeys.length === 0) {
+    console.error("Tidak ada private key yang diberikan. Program berhenti.");
+    process.exit(1);
+  }
+
+  const wallets = privateKeys.map(pk => new ethers.Wallet(pk, provider));
+  console.log(`Menggunakan ${wallets.length} akun untuk transaksi.`);
+
+  startAutoSwapSequence(wallets);
 }
 
-// Meminta user memasukkan private key
-async function getWallets() {
-    const privateKeys = await getUserInput(chalk.blue("🔑 Masukkan private keys (pisahkan dengan ','): "));
-    return privateKeys.split(",").map((key) => key.trim());
-}
+// Function to execute swaps with fallback on RPC errors
+async function safeSwap(swapFunction, wallet, ...args) {
+  let success = false;
+  let attempts = 0;
 
-// Meminta user memasukkan jumlah transaksi swap yang diinginkan
-async function getSwapCount() {
-    const swapCount = await getUserInput(chalk.blue("🔄 Masukkan jumlah transaksi swap yang diinginkan: "));
-    return parseInt(swapCount, 10);
-}
-
-// Mengacak urutan transaksi swap
-function getRandomSwapOrder(numSwaps) {
-    const swapOrders = Array.from({ length: numSwaps }, (_, i) => i + 1);
-    return swapOrders.sort(() => Math.random() - 0.5);
-}
-
-// Fungsi delay acak antara 1 hingga 3 menit
-async function randomDelay() {
-    const delayTime = Math.floor(Math.random() * (180000 - 60000) + 60000); // Antara 1 hingga 3 menit
-    console.log(chalk.yellow(`⏳ Menunggu ${(delayTime / 60000).toFixed(1)} menit sebelum transaksi berikutnya...`));
-    await new Promise((resolve) => setTimeout(resolve, delayTime));
-}
-
-// Fungsi untuk melakukan transaksi swap dengan fallback RPC
-async function executeSwap(web3, wallet, swapOrders) {
+  while (!success && attempts < RPC_LIST.length) {
     try {
-        console.log(chalk.blue(`🔄 Menjalankan transaksi swap untuk wallet: ${wallet}`));
-        for (const swapIndex of swapOrders) {
-            console.log(chalk.green(`✅ Melakukan transaksi swap ke-${swapIndex} untuk wallet ${wallet}`));
-            await randomDelay(); // Delay acak 1-3 menit antar transaksi
-        }
-        console.log(chalk.green(`🎉 Transaksi swap selesai untuk wallet: ${wallet}`));
+      await swapFunction(wallet, ...args);
+      success = true;
+      console.log(`Swap berhasil dengan RPC ${currentRpcIndex + 1}`);
     } catch (error) {
-        console.log(chalk.red("❌ Terjadi kesalahan dalam transaksi, mencoba RPC lain..."));
-        web3 = await getWeb3Instance();
-        await executeSwap(web3, wallet, swapOrders);
+      console.log(`RPC ${currentRpcIndex + 1} gagal: ${error.message}`);
+      switchToNextRpc();
+      attempts++;
     }
+  }
+
+  if (!success) {
+    console.log("Semua RPC gagal! Swap tidak dapat dilakukan.");
+  }
 }
 
-// Main function
-async function main() {
-    const web3 = await getWeb3Instance();
-    const wallets = await getWallets();
-    const swapCount = await getSwapCount();
-    const swapOrders = getRandomSwapOrder(swapCount);
-
-    for (let i = 0; i < wallets.length; i++) {
-        await executeSwap(web3, wallets[i], swapOrders);
-        if (i < wallets.length - 1) {
-            console.log(chalk.yellow("⏳ Jeda 2 menit sebelum melanjutkan ke wallet berikutnya..."));
-            await new Promise((resolve) => setTimeout(resolve, 120000)); // Jeda 2 menit sebelum pindah wallet
-        }
-    }
-
-    console.log(chalk.green("🎉 Semua transaksi selesai!"));
-    rl.close();
+// Random Delay
+function getRandomDelay(minSeconds, maxSeconds) {
+  return Math.floor(Math.random() * (maxSeconds - minSeconds + 1) + minSeconds) * 1000;
 }
 
-main();
+async function autoSwapAllPairs(wallets, totalSwaps) {
+  for (let i = 0; i < totalSwaps; i++) {
+    const wallet = wallets[i % wallets.length];
+
+    await safeSwap(swapAuto, wallet, "usdtToEth", getRandomSwapAmount());
+    await updateWalletData();
+    await delay(getRandomDelay(30, 60));
+
+    await safeSwap(swapAuto, wallet, "usdtToBtc", getRandomSwapAmount());
+    await updateWalletData();
+    await delay(getRandomDelay(30, 60));
+
+    await safeSwap(swapAuto, wallet, "btcToEth", getRandomSwapAmount());
+    await updateWalletData();
+  }
+
+  console.log("Semua swap selesai!");
+}
+
+function startAutoSwapSequence(wallets) {
+  rl.question("Masukkan jumlah swap: ", async (value) => {
+    const totalSwaps = parseInt(value);
+    if (isNaN(totalSwaps) || totalSwaps <= 0) {
+      console.log("Jumlah swap tidak valid. Masukkan angka > 0.");
+      return;
+    }
+    await autoSwapAllPairs(wallets, totalSwaps);
+  });
+}
+
+// Wallet balance update function
+async function updateWalletData() {
+  console.log("Mengupdate saldo wallet...");
+}
