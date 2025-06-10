@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "testing swap 0g using random RPC",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
