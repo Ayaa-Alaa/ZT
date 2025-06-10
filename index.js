@@ -1,60 +1,110 @@
 import "dotenv/config";
-import blessed from "blessed";
-import figlet from "figlet";
+import readlineSync from "readline-sync";
 import { ethers } from "ethers";
-import readline from "readline";
 
-// Mengelola daftar RPC
+// Mengambil data dari .env
 const RPC_LIST = process.env.RPC_URL.split(",").map(url => url.trim());
-let currentRpcIndex = 0;
-let provider = new ethers.JsonRpcProvider(RPC_LIST[currentRpcIndex]);
+const USDT_ADDRESS = process.env.USDT_ADDRESS;
+const ETH_ADDRESS = process.env.ETH_ADDRESS;
+const BTC_ADDRESS = process.env.BTC_ADDRESS;
+const ROUTER_ADDRESS = process.env.ROUTER_ADDRESS;
+const NETWORK_NAME = process.env.NETWORK_NAME;
+const CONTRACT_ABI = JSON.parse(process.env.CONTRACT_ABI); // Mengubah string JSON menjadi array ABI
 
-function switchToNextRpc() {
-  currentRpcIndex = (currentRpcIndex + 1) % RPC_LIST.length;
-  provider = new ethers.JsonRpcProvider(RPC_LIST[currentRpcIndex]);
-  console.log(`Beralih ke RPC ${currentRpcIndex + 1}: ${RPC_LIST[currentRpcIndex]}`);
+// Pilih RPC
+console.log("Pilih RPC yang ingin digunakan:");
+RPC_LIST.forEach((rpc, index) => console.log(`${index + 1}. ${rpc}`));
+const selectedRpcIndex = readlineSync.question("Masukkan nomor RPC: ") - 1;
+
+if (isNaN(selectedRpcIndex) || selectedRpcIndex < 0 || selectedRpcIndex >= RPC_LIST.length) {
+  console.error("Pilihan tidak valid.");
+  process.exit(1);
 }
 
-// Mendapatkan Private Key dari pengguna
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const provider = new ethers.JsonRpcProvider(RPC_LIST[selectedRpcIndex]);
+console.log(`Menggunakan RPC: ${RPC_LIST[selectedRpcIndex]}`);
 
-rl.question("Masukkan PRIVATE_KEY (pisahkan dengan koma jika lebih dari satu): ", (input) => {
-  const privateKeys = input.split(",").map(pk => pk.trim());
-  startApplication(privateKeys);
+// Input Private Key dengan tampilan alamat wallet
+const privateKeysInput = readlineSync.question("Masukkan PRIVATE_KEY (pisahkan dengan koma jika lebih dari satu): ");
+const privateKeys = privateKeysInput.split(",").map(pk => pk.trim());
+
+if (privateKeys.length === 0) {
+  console.error("Tidak ada private key yang diberikan. Program berhenti.");
+  process.exit(1);
+}
+
+// Konversi Private Key menjadi alamat wallet
+const wallets = privateKeys.map(pk => new ethers.Wallet(pk, provider));
+const walletAddresses = wallets.map(wallet => wallet.address);
+
+// Refresh tampilan untuk menunjukkan alamat wallet
+console.clear();
+console.log("🔑 Wallet Address yang digunakan:");
+walletAddresses.forEach((address, index) => {
+  console.log(`Wallet ${index + 1}: ${address}`);
 });
 
-function startApplication(privateKeys) {
-  if (privateKeys.length === 0) {
-    console.error("Tidak ada private key yang diberikan. Program berhenti.");
-    process.exit(1);
-  }
+// Masukkan jumlah swap
+const totalSwaps = readlineSync.questionInt("Masukkan jumlah swap: ");
 
-  const wallets = privateKeys.map(pk => new ethers.Wallet(pk, provider));
-  console.log(`Menggunakan ${wallets.length} akun untuk transaksi.`);
-
-  startAutoSwapSequence(wallets);
+if (totalSwaps <= 0) {
+  console.error("Jumlah swap tidak valid. Masukkan angka > 0.");
+  process.exit(1);
 }
 
-// Fungsi untuk menangani swap dengan fallback jika terjadi error RPC
-async function safeSwap(swapFunction, wallet, ...args) {
-  let success = false;
-  let attempts = 0;
+// Swap otomatis
+async function autoSwapAllPairs(wallets, totalSwaps, provider) {
+  for (let i = 0; i < totalSwaps; i++) {
+    const wallet = wallets[i % wallets.length];
 
-  while (!success && attempts < RPC_LIST.length) {
-    try {
-      await swapFunction(wallet, ...args);
-      success = true;
-      console.log(`Swap berhasil dengan RPC ${currentRpcIndex + 1}`);
-    } catch (error) {
-      console.log(`RPC ${currentRpcIndex + 1} gagal: ${error.message}`);
-      switchToNextRpc();
-      attempts++;
+    await swapAuto(wallet, provider, "usdtToEth", getRandomSwapAmount());
+    await updateWalletData();
+    await delay(getRandomDelay());
+
+    await swapAuto(wallet, provider, "usdtToBtc", getRandomSwapAmount());
+    await updateWalletData();
+    await delay(getRandomDelay());
+
+    await swapAuto(wallet, provider, "btcToEth", getRandomSwapAmount());
+    await updateWalletData();
+  }
+
+  console.log("Semua swap selesai!");
+}
+
+// Fungsi Swap
+async function swapAuto(wallet, provider, direction, amountIn) {
+  try {
+    const swapContract = new ethers.Contract(ROUTER_ADDRESS, CONTRACT_ABI, wallet);
+    let params;
+    const deadline = Math.floor(Date.now() / 1000) + 120;
+
+    if (direction === "usdtToEth") {
+      params = { tokenIn: USDT_ADDRESS, tokenOut: ETH_ADDRESS, fee: 3000, recipient: wallet.address, deadline, amountIn, amountOutMinimum: 0, sqrtPriceLimitX96: 0n };
+    } else if (direction === "usdtToBtc") {
+      params = { tokenIn: USDT_ADDRESS, tokenOut: BTC_ADDRESS, fee: 3000, recipient: wallet.address, deadline, amountIn, amountOutMinimum: 0, sqrtPriceLimitX96: 0n };
+    } else if (direction === "btcToEth") {
+      params = { tokenIn: BTC_ADDRESS, tokenOut: ETH_ADDRESS, fee: 3000, recipient: wallet.address, deadline, amountIn, amountOutMinimum: 0, sqrtPriceLimitX96: 0n };
+    } else {
+      throw new Error("Swap direction tidak valid.");
     }
-  }
 
-  if (!success) {
-    console.log("Semua RPC gagal! Swap tidak dapat dilakukan.");
+    const tx = await swapContract.exactInputSingle(params, { gasLimit: 150000, gasPrice: await provider.getFeeData().gasPrice });
+    console.log(`Swap berhasil: ${tx.hash}`);
+    await tx.wait();
+  } catch (error) {
+    console.error(`Swap gagal: ${error.message}`);
   }
+}
+
+// Fungsi Update Saldo
+async function updateWalletData() {
+  console.log("Mengupdate saldo wallet...");
+}
+
+// Fungsi Delay
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Fungsi untuk mendapatkan jumlah swap acak
@@ -62,43 +112,10 @@ function getRandomSwapAmount() {
   return Math.floor(Math.random() * (300 - 100 + 1) + 100);
 }
 
-// Fungsi delay acak untuk swap
+// Fungsi untuk jeda acak antar swap
 function getRandomDelay() {
   return Math.floor(Math.random() * (120 - 60 + 1) + 60) * 1000;
 }
 
-async function autoSwapAllPairs(wallets, totalSwaps) {
-  for (let i = 0; i < totalSwaps; i++) {
-    const wallet = wallets[i % wallets.length];
-
-    await safeSwap(swapAuto, wallet, "usdtToEth", getRandomSwapAmount());
-    await updateWalletData();
-    await delay(getRandomDelay());
-
-    await safeSwap(swapAuto, wallet, "usdtToBtc", getRandomSwapAmount());
-    await updateWalletData();
-    await delay(getRandomDelay());
-
-    await safeSwap(swapAuto, wallet, "btcToEth", getRandomSwapAmount());
-    await updateWalletData();
-  }
-
-  console.log("Semua swap selesai!");
-}
-
-function startAutoSwapSequence(wallets) {
-  rl.question("Masukkan jumlah swap: ", async (value) => {
-    rl.close();
-    const totalSwaps = parseInt(value);
-    if (isNaN(totalSwaps) || totalSwaps <= 0) {
-      console.log("Jumlah swap tidak valid. Masukkan angka > 0.");
-      return;
-    }
-    await autoSwapAllPairs(wallets, totalSwaps);
-  });
-}
-
-// Fungsi update saldo wallet secara berkala
-async function updateWalletData() {
-  console.log("Mengupdate saldo wallet...");
-}
+// Menjalankan swap otomatis
+autoSwapAllPairs(wallets, totalSwaps, provider);
