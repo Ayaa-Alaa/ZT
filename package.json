@@ -1,7 +1,7 @@
 {
-  "name": "nt-exhaust",
+  "name": "contoh percobaan",
   "version": "1.0.0",
-  "description": "Automated swap system with multiple RPC fallbacks",
+  "description": "testing swap 0g using random RPC",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
