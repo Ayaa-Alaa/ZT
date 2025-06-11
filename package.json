@@ -1,15 +1,15 @@
 {
-  "name": "contoh percobaan",
+  "name": "auto-swap-cli",
   "version": "1.0.0",
-  "description": "testing swap 0g using random RPC",
-  "main": "index.js",
+  "description": "Program auto swap menggunakan file konfigurasi datanya.json dan interface CLI sederhana.",
+  "main": "modifikasi.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node modifikasi.js"
   },
   "dependencies": {
-    "dotenv": "^16.0.3",
-    "ethers": "^6.4.0",
-    "readline-sync": "^1.4.10"
-  }
+    "ethers": "^6.6.0"
+  },
+  "author": "yarbukatoko",
+  "license": "MIT"
 }
