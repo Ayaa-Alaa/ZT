@@ -151,7 +151,8 @@ async function autoSwapUsdtEth(totalSwaps) {
       if (!transactionRunning) return;
       if (i % 2 === 1) {
         await addTransactionToQueue(async (nonce) => {
-          const randomUsdt = (Math.random() * 200 + 100).toFixed(2);
+          // Mengubah nilai swap USDT menjadi antara 20 - 90
+          const randomUsdt = (Math.random() * 70 + 20).toFixed(2);
           const usdtAmount = ethers.parseUnits(randomUsdt, 18);
           const usdtContract = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, provider);
           const currentUsdtBalance = await usdtContract.balanceOf(wallet.address);
@@ -162,7 +163,8 @@ async function autoSwapUsdtEth(totalSwaps) {
         }, `USDT→ETH Swap ${i}`);
       } else {
         await addTransactionToQueue(async (nonce) => {
-          const randomEth = (Math.random() * 0.2 + 0.1).toFixed(6);
+          // Mengubah nilai swap ETH menjadi antara 0.04 - 0.08
+          const randomEth = (Math.random() * 0.04 + 0.04).toFixed(6);
           const ethAmount = ethers.parseUnits(randomEth, 18);
           const ethContract = new ethers.Contract(ETH_ADDRESS, ERC20_ABI, provider);
           const currentEthBalance = await ethContract.balanceOf(wallet.address);
@@ -186,6 +188,7 @@ async function autoSwapUsdtEth(totalSwaps) {
   }
 }
 
+
 // ---------------- Auto Swap USDT & BTC ----------------
 async function autoSwapUsdtBtc(totalSwaps) {
   try {
@@ -193,7 +196,7 @@ async function autoSwapUsdtBtc(totalSwaps) {
       if (!transactionRunning) return;
       if (i % 2 === 1) {
         await addTransactionToQueue(async (nonce) => {
-          const randomUsdt = (Math.random() * 200 + 100).toFixed(2);
+          const randomUsdt = (Math.random() * 70 + 20).toFixed(2);
           const usdtAmount = ethers.parseUnits(randomUsdt, 18);
           const usdtContract = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, provider);
           const currentUsdtBalance = await usdtContract.balanceOf(wallet.address);
@@ -204,7 +207,7 @@ async function autoSwapUsdtBtc(totalSwaps) {
         }, `USDT→BTC Swap ${i}`);
       } else {
         await addTransactionToQueue(async (nonce) => {
-          const randomBtc = (Math.random() * 0.04 + 0.01).toFixed(6);
+          const randomBtc = (Math.random() * 0.0004 + 0.00003).toFixed(6);
           const btcAmount = ethers.parseUnits(randomBtc, 18);
           const btcContract = new ethers.Contract(BTC_ADDRESS, ERC20_ABI, provider);
           const currentBtcBalance = await btcContract.balanceOf(wallet.address);
